@@ -1,0 +1,248 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: #fafafa;
+    color: #1a1a1a;
+    line-height: 1.6;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 50px;
+    padding-bottom: 30px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+h1 {
+    font-size: 2.5em;
+    font-weight: 300;
+    letter-spacing: -0.5px;
+    margin-bottom: 10px;
+}
+
+.subtitle {
+    color: #666;
+    font-size: 1.1em;
+    font-weight: 300;
+}
+
+.tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 30px;
+    border-bottom: 1px solid #e5e5e5;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    padding: 15px 25px;
+    font-size: 1em;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.3s;
+}
+
+.tab-btn:hover {
+    color: #1a1a1a;
+}
+
+.tab-btn.active {
+    color: #1a1a1a;
+    border-bottom-color: #1a1a1a;
+}
+
+.controls {
+    margin-bottom: 30px;
+}
+
+.period-buttons {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.period-btn {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    padding: 8px 16px;
+    font-size: 0.9em;
+    color: #666;
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.2s;
+}
+
+.period-btn:hover {
+    border-color: #1a1a1a;
+    color: #1a1a1a;
+}
+
+.period-btn.active {
+    background: #1a1a1a;
+    color: #fff;
+    border-color: #1a1a1a;
+}
+
+select {
+    background: #fff;
+    border: 1px solid #e5e5e5;
+    padding: 10px 15px;
+    font-size: 1em;
+    color: #1a1a1a;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.loading {
+    text-align: center;
+    padding: 60px 20px;
+    color: #666;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    margin-bottom: 30px;
+}
+
+th {
+    text-align: left;
+    padding: 12px 15px;
+    font-weight: 500;
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: #666;
+    border-bottom: 2px solid #e5e5e5;
+}
+
+td {
+    padding: 12px 15px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 0.95em;
+}
+
+tr:hover {
+    background: #fafafa;
+}
+
+.ticker-link {
+    color: #1a1a1a;
+    text-decoration: none;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.ticker-link:hover {
+    text-decoration: underline;
+}
+
+.positive {
+    color: #2d7a3e;
+    font-weight: 500;
+}
+
+.negative {
+    color: #c13224;
+    font-weight: 500;
+}
+
+.insight-box {
+    background: #f5f5f0;
+    padding: 20px;
+    border-left: 3px solid #1a1a1a;
+    margin-top: 20px;
+}
+
+.insight-box h3 {
+    font-size: 1em;
+    font-weight: 500;
+    margin-bottom: 10px;
+}
+
+.update-info {
+    text-align: center;
+    padding: 20px;
+    font-size: 0.85em;
+    color: #999;
+}
+
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+}
+
+.modal-content {
+    background: #fff;
+    margin: 5% auto;
+    padding: 30px;
+    width: 90%;
+    max-width: 1000px;
+    border-radius: 4px;
+    position: relative;
+}
+
+.close {
+    position: absolute;
+    right: 20px;
+    top: 15px;
+    font-size: 28px;
+    font-weight: bold;
+    color: #666;
+    cursor: pointer;
+}
+
+.close:hover {
+    color: #1a1a1a;
+}
+
+#chart-container {
+    margin-top: 20px;
+}
+
+@media (max-width: 768px) {
+    .container {
+        padding: 20px 15px;
+    }
+    
+    h1 {
+        font-size: 2em;
+    }
+    
+    .tabs {
+        flex-wrap: wrap;
+    }
+    
+    .tab-btn {
+        padding: 10px 15px;
+        font-size: 0.9em;
+    }
+    
+    table {
+        font-size: 0.85em;
+    }
+    
+    th, td {
+        padding: 8px 10px;
+    }
+}
