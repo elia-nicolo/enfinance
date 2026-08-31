@@ -3,339 +3,73 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AssetScope Pro - Analisi Mercati Globali</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0e27 0%, #1a1f3a 100%);
-            color: #e0e0e0;
-            padding: 20px;
-            min-height: 100vh;
-        }
-        .header {
-            background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            padding: 30px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            text-align: center;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-        h1 { font-size: 2.8em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.5); }
-        .subtitle { font-size: 1.2em; opacity: 0.9; }
-        .controls {
-            background: rgba(26, 31, 58, 0.95);
-            padding: 25px;
-            border-radius: 15px;
-            margin-bottom: 30px;
-            backdrop-filter: blur(10px);
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-        }
-        .tab-buttons { display: flex; gap: 15px; margin-bottom: 25px; flex-wrap: wrap; }
-        .tab-btn {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            color: white; border: none;
-            padding: 15px 30px; border-radius: 10px;
-            cursor: pointer; font-size: 1.1em; font-weight: 600;
-            transition: all 0.3s;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
-        .tab-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(42, 82, 152, 0.4); }
-        .tab-btn.active { background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%); }
-        .period-buttons { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; }
-        .period-btn {
-            background: rgba(42, 82, 152, 0.8);
-            color: white; border: 2px solid transparent;
-            padding: 12px 24px; border-radius: 8px;
-            cursor: pointer; font-size: 1em; font-weight: 500;
-            transition: all 0.3s;
-        }
-        .period-btn:hover { background: rgba(58, 107, 197, 0.9); border-color: #4CAF50; }
-        .period-btn.active { background: #4CAF50; border-color: #45a049; box-shadow: 0 0 15px rgba(76, 175, 80, 0.5); }
-        .category-selector { margin-top: 20px; }
-        .category-selector select {
-            background: rgba(42, 82, 152, 0.8);
-            color: white; border: 2px solid #2a5298;
-            padding: 12px 20px; border-radius: 8px;
-            font-size: 1em; cursor: pointer; width: 100%; max-width: 400px;
-        }
-        .table-container {
-            background: rgba(26, 31, 58, 0.95);
-            border-radius: 15px; overflow: hidden;
-            margin-bottom: 30px;
-            box-shadow: 0 5px 20px rgba(0,0,0,0.3);
-        }
-        table { width: 100%; border-collapse: collapse; }
-        th {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            padding: 18px 15px; text-align: left;
-            font-weight: 600; font-size: 0.95em;
-            text-transform: uppercase; letter-spacing: 0.5px;
-        }
-        td { padding: 15px; border-bottom: 1px solid rgba(42, 47, 74, 0.5); font-size: 0.95em; }
-        tr:hover { background: rgba(37, 43, 74, 0.5); }
-        .positive { color: #4CAF50; font-weight: bold; }
-        .negative { color: #f44336; font-weight: bold; }
-        .loading { text-align: center; padding: 60px 20px; font-size: 1.3em; }
-        .loading-spinner {
-            border: 4px solid rgba(255,255,255,0.1);
-            border-top: 4px solid #4CAF50;
-            border-radius: 50%;
-            width: 50px; height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .insight-box {
-            background: linear-gradient(135deg, #2a5298 0%, #1e3c72 100%);
-            padding: 25px; border-radius: 15px; margin-top: 25px;
-        }
-        .insight-box h3 { margin-bottom: 15px; font-size: 1.4em; }
-        .ticker-link { color: #64b5f6; text-decoration: none; font-weight: 600; }
-        .ticker-link:hover { text-decoration: underline; }
-        .refresh-info {
-            text-align: center; padding: 10px;
-            font-size: 0.9em; opacity: 0.7;
-        }
-        @media (max-width: 768px) {
-            h1 { font-size: 2em; }
-            .tab-btn { padding: 12px 20px; font-size: 1em; }
-            .period-btn { padding: 10px 18px; font-size: 0.9em; }
-            th, td { padding: 10px 8px; font-size: 0.85em; }
-        }
-    </style>
+    <title>AssetScope</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 </head>
 <body>
-    <div class="header">
-        <h1>📊 AssetScope Pro</h1>
-        <p class="subtitle">Analisi Completa dei Mercati Finanziari Globali</p>
-    </div>
-    
-    <div class="controls">
-        <div class="tab-buttons">
-            <button class="tab-btn active" onclick="cambiaTab('peggiori', this)">📉 Peggiori</button>
-            <button class="tab-btn" onclick="cambiaTab('migliori', this)">📈 Migliori</button>
-            <button class="tab-btn" onclick="cambiaTab('capitalizzati', this)">💰 Top Capitalizzati</button>
-            <button class="tab-btn" onclick="cambiaTab('categoria', this)">🗂️ Per Categoria</button>
-        </div>
-        
-        <div id="periodo-controls">
-            <h3 style="margin-bottom: 15px;">⏱️ Periodo Temporale:</h3>
+    <div class="container">
+        <header>
+            <h1>AssetScope</h1>
+            <p class="subtitle">Analisi dei mercati finanziari globali</p>
+        </header>
+
+        <nav class="tabs">
+            <button class="tab-btn active" data-tab="peggiori">Peggiori</button>
+            <button class="tab-btn" data-tab="migliori">Migliori</button>
+            <button class="tab-btn" data-tab="capitalizzati">Top Capitalizzati</button>
+            <button class="tab-btn" data-tab="categorie">Categorie</button>
+        </nav>
+
+        <div class="controls" id="controls-peggiori">
             <div class="period-buttons">
-                <button class="period-btn" data-periodo="1s" onclick="cambiaPeriodo('1s', this)">1 Settimana</button>
-                <button class="period-btn" data-periodo="1m" onclick="cambiaPeriodo('1m', this)">1 Mese</button>
-                <button class="period-btn active" data-periodo="3m" onclick="cambiaPeriodo('3m', this)">3 Mesi</button>
-                <button class="period-btn" data-periodo="6m" onclick="cambiaPeriodo('6m', this)">6 Mesi</button>
-                <button class="period-btn" data-periodo="12m" onclick="cambiaPeriodo('12m', this)">12 Mesi</button>
-                <button class="period-btn" data-periodo="18m" onclick="cambiaPeriodo('18m', this)">18 Mesi</button>
-                <button class="period-btn" data-periodo="24m" onclick="cambiaPeriodo('24m', this)">24 Mesi</button>
+                <button class="period-btn" data-periodo="1s">1S</button>
+                <button class="period-btn" data-periodo="1m">1M</button>
+                <button class="period-btn active" data-periodo="3m">3M</button>
+                <button class="period-btn" data-periodo="6m">6M</button>
+                <button class="period-btn" data-periodo="12m">12M</button>
+                <button class="period-btn" data-periodo="18m">18M</button>
+                <button class="period-btn" data-periodo="24m">24M</button>
             </div>
         </div>
-        
-        <div id="categoria-controls" class="category-selector" style="display: none;">
-            <h3 style="margin-bottom: 15px;">🗂️ Categoria:</h3>
-            <select id="categoria-select" onchange="caricaCategoria()">
-                <option value="indici_sviluppati">Indici Mercati Sviluppati</option>
+
+        <div class="controls" id="controls-migliori" style="display: none;">
+            <div class="period-buttons">
+                <button class="period-btn" data-periodo="1s">1S</button>
+                <button class="period-btn" data-periodo="1m">1M</button>
+                <button class="period-btn active" data-periodo="3m">3M</button>
+                <button class="period-btn" data-periodo="6m">6M</button>
+                <button class="period-btn" data-periodo="12m">12M</button>
+                <button class="period-btn" data-periodo="18m">18M</button>
+                <button class="period-btn" data-periodo="24m">24M</button>
+            </div>
+        </div>
+
+        <div class="controls" id="controls-categorie" style="display: none;">
+            <select id="categoria-select">
+                <option value="indici_sviluppati">Indici Sviluppati</option>
                 <option value="mercati_emergenti">Mercati Emergenti</option>
-                <option value="top_100_aziende">Top 100 Aziende</option>
+                <option value="top_aziende">Top Aziende</option>
                 <option value="materie_prime">Materie Prime</option>
-                <option value="crypto">Cryptovalute</option>
+                <option value="crypto">Crypto</option>
                 <option value="etf_settoriali">ETF Settoriali</option>
             </select>
         </div>
+
+        <div id="contenuto">
+            <div class="loading">Caricamento...</div>
+        </div>
+
+        <div class="update-info" id="update-info"></div>
     </div>
-    
-    <div id="contenuto">
-        <div class="loading">
-            <div class="loading-spinner"></div>
-            Caricamento dati in corso...
+
+    <div id="chart-modal" class="modal">
+        <div class="modal-content">
+            <span class="close">&times;</span>
+            <h2 id="chart-title"></h2>
+            <div id="chart-container"></div>
         </div>
     </div>
-    
-    <div class="refresh-info" id="refresh-info"></div>
-    
-    <script>
-        let tabCorrente = 'peggiori';
-        let periodoCorrente = '3m';
-        let categoriaCorrente = 'indici_sviluppati';
-        
-        function cambiaTab(tab, btn) {
-            tabCorrente = tab;
-            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            
-            document.getElementById('periodo-controls').style.display = 
-                (tab === 'peggiori' || tab === 'migliori') ? 'block' : 'none';
-            document.getElementById('categoria-controls').style.display = 
-                (tab === 'categoria') ? 'block' : 'none';
-            
-            caricaDati();
-        }
-        
-        function cambiaPeriodo(periodo, btn) {
-            periodoCorrente = periodo;
-            document.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
-            btn.classList.add('active');
-            caricaDati();
-        }
-        
-        function caricaCategoria() {
-            categoriaCorrente = document.getElementById('categoria-select').value;
-            caricaDati();
-        }
-        
-        async function caricaDati() {
-            const contenuto = document.getElementById('contenuto');
-            contenuto.innerHTML = '<div class="loading"><div class="loading-spinner"></div>Caricamento dati in corso... (potrebbe richiedere 30-60 secondi al primo caricamento)</div>';
-            
-            try {
-                let url;
-                if (tabCorrente === 'peggiori') url = `/api/peggiori/${periodoCorrente}`;
-                else if (tabCorrente === 'migliori') url = `/api/migliori/${periodoCorrente}`;
-                else if (tabCorrente === 'capitalizzati') url = '/api/top-capitalizzati';
-                else if (tabCorrente === 'categoria') url = `/api/categoria/${categoriaCorrente}`;
-                
-                const response = await fetch(url);
-                const dati = await response.json();
-                
-                if (tabCorrente === 'peggiori') mostraClassifica(dati, 'peggiori', '📉 Peggiori Performer');
-                else if (tabCorrente === 'migliori') mostraClassifica(dati, 'migliori', '📈 Migliori Performer');
-                else if (tabCorrente === 'capitalizzati') mostraCapitalizzati(dati);
-                else if (tabCorrente === 'categoria') mostraCategoria(dati);
-                
-                document.getElementById('refresh-info').textContent = 
-                    `Ultimo aggiornamento: ${new Date().toLocaleString('it-IT')} | Dati in cache per 15 minuti`;
-            } catch (error) {
-                contenuto.innerHTML = `<div class="loading" style="color: #f44336;">❌ Errore: ${error.message}</div>`;
-            }
-        }
-        
-        function mostraClassifica(dati, tipo, titolo) {
-            const periodoNomi = {
-                '1_settimana': '1 Settimana', '1_mese': '1 Mese',
-                '3_mesi': '3 Mesi', '6_mesi': '6 Mesi',
-                '12_mesi': '12 Mesi', '18_mesi': '18 Mesi', '24_mesi': '24 Mesi'
-            };
-            
-            const lista = tipo === 'peggiori' ? dati.peggiori : dati.migliori;
-            const categoriaNomi = {
-                'indici_sviluppati': 'Indici Sviluppati',
-                'mercati_emergenti': 'Mercati Emergenti',
-                'top_100_aziende': 'Top Aziende',
-                'materie_prime': 'Materie Prime',
-                'crypto': 'Crypto',
-                'etf_settoriali': 'ETF Settoriali'
-            };
-            
-            let html = `<h2 style="margin-bottom: 20px;">${titolo} - ${periodoNomi[dati.periodo]}</h2>`;
-            html += `<div class="table-container"><table>
-                <thead><tr>
-                    <th>#</th><th>Ticker</th><th>Nome</th><th>Categoria</th>
-                    <th>Prezzo</th><th>Variazione</th>
-                </tr></thead><tbody>`;
-            
-            lista.forEach((titolo, idx) => {
-                const classe = titolo.variazione >= 0 ? 'positive' : 'negative';
-                const simbolo = titolo.variazione >= 0 ? '▲' : '▼';
-                html += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><a href="https://finance.yahoo.com/quote/${titolo.ticker}" target="_blank" class="ticker-link">${titolo.ticker}</a></td>
-                    <td>${titolo.nome}</td>
-                    <td>${categoriaNomi[titolo.categoria] || titolo.categoria}</td>
-                    <td>$${titolo.prezzo || 'N/A'}</td>
-                    <td class="${classe}">${simbolo} ${titolo.variazione}%</td>
-                </tr>`;
-            });
-            
-            html += `</tbody></table></div>`;
-            html += `<div class="insight-box">
-                <h3>💡 Insight di Investimento</h3>
-                <p><strong>Totale titoli analizzati:</strong> ${dati.totale_titoli}</p>
-                <p style="margin-top: 10px;">
-                    ${tipo === 'peggiori' 
-                        ? 'I peggiori performer possono rappresentare opportunità di acquisto (Mean Reversion) se i fondamentali aziendali sono solidi. Attenzione alle Value Trap!' 
-                        : 'I migliori performer potrebbero essere in bolla. Valuta sempre il rapporto P/E e la sostenibilità della crescita.'}
-                </p>
-            </div>`;
-            
-            document.getElementById('contenuto').innerHTML = html;
-        }
-        
-        function mostraCapitalizzati(dati) {
-            let html = `<h2 style="margin-bottom: 20px;">💰 Top 100 Aziende per Capitalizzazione</h2>`;
-            html += `<div class="table-container"><table>
-                <thead><tr>
-                    <th>#</th><th>Ticker</th><th>Nome</th><th>Categoria</th>
-                    <th>Prezzo</th><th>Market Cap</th><th>Var. 6M</th>
-                </tr></thead><tbody>`;
-            
-            dati.forEach((titolo, idx) => {
-                const marketCapMiliardi = (titolo.market_cap / 1e9).toFixed(2);
-                const classe = titolo.variazione_6m >= 0 ? 'positive' : 'negative';
-                const simbolo = titolo.variazione_6m >= 0 ? '▲' : '▼';
-                html += `<tr>
-                    <td>${idx + 1}</td>
-                    <td><a href="https://finance.yahoo.com/quote/${titolo.ticker}" target="_blank" class="ticker-link">${titolo.ticker}</a></td>
-                    <td>${titolo.nome}</td>
-                    <td>${titolo.categoria}</td>
-                    <td>$${titolo.prezzo || 'N/A'}</td>
-                    <td>$${marketCapMiliardi}B</td>
-                    <td class="${classe}">${simbolo} ${titolo.variazione_6m || 0}%</td>
-                </tr>`;
-            });
-            
-            html += `</tbody></table></div>`;
-            html += `<div class="insight-box">
-                <h3>💡 Flight to Quality</h3>
-                <p>Le mega-cap rappresentano rifugi sicuri durante le correzioni di mercato. 
-                Quando i mercati sono volatili, i capitali istituzionali tendono a spostarsi verso queste aziende.</p>
-            </div>`;
-            
-            document.getElementById('contenuto').innerHTML = html;
-        }
-        
-        function mostraCategoria(dati) {
-            const categoriaNomi = {
-                'indici_sviluppati': 'Indici Mercati Sviluppati',
-                'mercati_emergenti': 'Mercati Emergenti',
-                'top_100_aziende': 'Top 100 Aziende',
-                'materie_prime': 'Materie Prime',
-                'crypto': 'Cryptovalute',
-                'etf_settoriali': 'ETF Settoriali'
-            };
-            
-            let html = `<h2 style="margin-bottom: 20px;">🗂️ ${categoriaNomi[dati.categoria]}</h2>`;
-            html += `<div class="table-container"><table>
-                <thead><tr>
-                    <th>Ticker</th><th>Nome</th><th>Prezzo</th>
-                    <th>1S</th><th>1M</th><th>3M</th><th>6M</th><th>12M</th><th>24M</th>
-                </tr></thead><tbody>`;
-            
-            dati.titoli.forEach(titolo => {
-                html += `<tr>
-                    <td><a href="https://finance.yahoo.com/quote/${titolo.ticker}" target="_blank" class="ticker-link">${titolo.ticker}</a></td>
-                    <td>${titolo.nome}</td>
-                    <td>$${titolo.prezzo_attuale || 'N/A'}</td>`;
-                
-                ['1_settimana', '1_mese', '3_mesi', '6_mesi', '12_mesi', '24_mesi'].forEach(p => {
-                    const var_val = titolo.variazioni[p];
-                    if (var_val !== null && var_val !== undefined) {
-                        const classe = var_val >= 0 ? 'positive' : 'negative';
-                        html += `<td class="${classe}">${var_val}%</td>`;
-                    } else {
-                        html += `<td>N/A</td>`;
-                    }
-                });
-                
-                html += `</tr>`;
-            });
-            
-            html += `</tbody></table></div>`;
-            document.getElementById('contenuto').innerHTML = html;
-        }
-        
-        // Carica i dati iniziali
-        window.onload = () => caricaDati();
-    </script>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
 </body>
 </html>
