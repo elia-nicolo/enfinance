@@ -11,41 +11,32 @@ app = Flask(__name__)
 
 CACHE_FILE = 'cache_dati.json'
 
-# Fuso orario italiano
 FUSO_ITALIA = ZoneInfo('Europe/Rome')
 
 def ottieni_ora_italiana():
-    """Restituisce l'ora corrente in Italia"""
     return datetime.now(FUSO_ITALIA)
 
 def in_fascia_attiva():
-    """Verifica se siamo nella fascia 9:00-21:00 italiana"""
     ora = ottieni_ora_italiana().hour
     return 9 <= ora < 21
 
 def ottieni_cache_duration():
-    """Restituisce la durata della cache in base all'ora italiana"""
     if in_fascia_attiva():
-        # Durante il giorno: cache di 2 ore
-        return 7200
+        return 10800  # 3 ore
     else:
-        # Di notte: cache di 12 ore (ma non aggiorniamo comunque)
         return 43200
 
 def cache_valida():
-    """Verifica se la cache esiste ed è ancora valida"""
     if not os.path.exists(CACHE_FILE):
         return False
     
     try:
-        # Controlla l'età del file
         eta_file = time.time() - os.path.getmtime(CACHE_FILE)
         durata_massima = ottieni_cache_duration()
         
         if eta_file < durata_massima:
             return True
         
-        # Cache scaduta, ma se siamo di notte la teniamo comunque
         if not in_fascia_attiva():
             return True
         
@@ -53,7 +44,24 @@ def cache_valida():
     except:
         return False
 
-TWELVE_DATA_API_KEY = os.environ.get('TWELVE_DATA_API_KEY', 'f2cf69a2047947ef9022047ffaa2c8e6')
+def tempo_al_prossimo_aggiornamento():
+    """Restituisce i secondi mancanti al prossimo aggiornamento"""
+    if not os.path.exists(CACHE_FILE):
+        return 0
+    
+    eta_file = time.time() - os.path.getmtime(CACHE_FILE)
+    durata_massima = ottieni_cache_duration()
+    rimanenti = durata_massima - eta_file
+    
+    if not in_fascia_attiva():
+        # Calcola secondi fino alle 9:00 di domani
+        ora = ottieni_ora_italiana()
+        secondi_mancanti = (24 - ora.hour + 9) * 3600 - ora.minute * 60 - ora.second
+        return max(0, secondi_mancanti)
+    
+    return max(0, int(rimanenti))
+
+TWELVE_DATA_API_KEY = os.environ.get('TWELVE_DATA_API_KEY', 'b14ba2a7063447738bd8b353bbf39b1c')
 
 stato = {
     'in_corso': False, 
@@ -63,19 +71,79 @@ stato = {
     'ultimo_aggiornamento': None
 }
 
+# ============================================================================
+# TICKER AGGIORNATI - CORRETTI PER TWELVE DATA
+# ============================================================================
+
 TICKERS = {
     'indici_globali': {
-        'SPX': 'S&P 500', 'NDX': 'Nasdaq 100', 'DJI': 'Dow Jones',
-        'FTSE': 'FTSE 100 UK', 'DAX': 'DAX Germania', 'CAC': 'CAC 40 Francia',
-        'N225': 'Nikkei 225 Giappone', 'HSI': 'Hang Seng HK',
-        'ASX200': 'ASX 200 Australia', 'GSPTSE': 'TSX Canada',
+        'SPX': 'S&P 500', 
+        'NDX': 'Nasdaq 100', 
+        'DJI': 'Dow Jones',
+        'FTSE': 'FTSE 100 UK', 
+        'DAX': 'DAX Germania', 
+        'CAC': 'CAC 40 Francia',
+        'N225': 'Nikkei 225 Giappone', 
+        'HSI': 'Hang Seng HK',
+        'ASX200': 'ASX 200 Australia', 
+        'GSPTSE': 'TSX Canada',
     },
+    
+    # ETF EUROPEI UCITS (formato TICKER.BORSA)
+    'etf_europei': {
+        'XDWD.DE': 'Xtrackers MSCI World (Acc)',
+        'XEON.DE': 'Xtrackers MSCI Europe',
+        'XWD1.DE': 'Xtrackers MSCI AC World',
+        'CSPX.DE': 'iShares Core S&P 500 (Acc)',
+        'SXR8.DE': 'iShares Core S&P 500 (Dist)',
+        'EUNL.DE': 'iShares Core MSCI World',
+        'IBCX.DE': 'iShares Euro Corporate Bond',
+        'SGLN.DE': 'iShares Physical Gold',
+        'QDVE.DE': 'iShares Nasdaq 100 (Acc)',
+        'EXST.DE': 'iShares STOXX Europe 600',
+        'EIMI.DE': 'iShares Core MSCI EM IMI',
+        'VNRA.DE': 'Vanguard FTSE All-World',
+        'VUSA.DE': 'Vanguard S&P 500 (Dist)',
+        'VUAA.DE': 'Vanguard S&P 500 (Acc)',
+        'VWCE.DE': 'Vanguard FTSE All-World (Acc)',
+        'AMEU.DE': 'Amundi MSCI Europe',
+        'ANX.DE': 'Amundi Nasdaq-100 (Acc)',
+    },
+    
+    # ETF USA (equivalenti degli UCITS, molto liquidi)
+    'etf_usa_principali': {
+        'SPY': 'SPDR S&P 500 ETF',
+        'IVV': 'iShares Core S&P 500',
+        'VOO': 'Vanguard S&P 500',
+        'QQQ': 'Invesco QQQ (Nasdaq-100)',
+        'VTI': 'Vanguard Total Stock Market',
+        'ACWI': 'iShares MSCI ACWI (Mondo)',
+        'VXUS': 'Vanguard FTSE Ex-US',
+        'VEA': 'Vanguard FTSE Developed Markets',
+        'VT': 'Vanguard Total World Stock',
+    },
+    
+    # MERCATI EMERGENTI - CORRETTI (senza /USD!)
     'mercati_emergenti': {
-        'EEM/USD': 'ETF Mercati Emergenti', 'VWO/USD': 'Vanguard Emerging',
-        'INDA/USD': 'ETF India', 'FXI/USD': 'ETF Cina',
-        'EWZ/USD': 'ETF Brasile', 'EWT/USD': 'ETF Taiwan',
-        'EPI/USD': 'ETF India WisdomTree', 'IEMG/USD': 'ETF Emerging Markets',
+        'EEM': 'iShares MSCI Emerging Markets',
+        'VWO': 'Vanguard FTSE Emerging',
+        'IEMG': 'iShares Core MSCI EM',
+        'INDA': 'iShares MSCI India',
+        'FXI': 'iShares China Large-Cap',
+        'MCHI': 'iShares MSCI China',
+        'EWZ': 'iShares MSCI Brazil',
+        'EWT': 'iShares MSCI Taiwan',
+        'EWJ': 'iShares MSCI Japan',
+        'EWY': 'iShares MSCI South Korea',
+        'EWW': 'iShares MSCI Mexico',
+        'EZA': 'iShares MSCI South Africa',
+        'EWS': 'iShares MSCI Singapore',
+        'EPI': 'WisdomTree India Earnings',
+        'RSX': 'VanEck Russia ETF',
+        'TUR': 'iShares MSCI Turkey',
+        'AFK': 'VanEck Africa ETF',
     },
+    
     'top_100_usa': {
         'AAPL': 'Apple', 'MSFT': 'Microsoft', 'GOOGL': 'Alphabet',
         'AMZN': 'Amazon', 'NVDA': 'Nvidia', 'META': 'Meta',
@@ -96,51 +164,37 @@ TICKERS = {
         'NKE': 'Nike', 'BA': 'Boeing', 'CAT': 'Caterpillar',
         'GE': 'General Electric', 'HON': 'Honeywell', 'PYPL': 'PayPal',
         'UBER': 'Uber', 'ABNB': 'Airbnb', 'CRWD': 'CrowdStrike',
-        'PANW': 'Palo Alto Networks', 'NET': 'Cloudflare', 'SNOW': 'Snowflake',
+        'PANW': 'Palo Alto', 'NET': 'Cloudflare', 'SNOW': 'Snowflake',
         'PLTR': 'Palantir', 'SQ': 'Block', 'COIN': 'Coinbase',
         'SBUX': 'Starbucks', 'NOW': 'ServiceNow', 'INTU': 'Intuit',
-        'AMAT': 'Applied Materials', 'MU': 'Micron Technology',
-        'LRCX': 'Lam Research', 'KLAC': 'KLA Corporation',
-        'DE': 'Deere & Co', 'CAT': 'Caterpillar', 'UPS': 'UPS',
-        'RTX': 'Raytheon', 'LMT': 'Lockheed Martin', 'T': 'AT&T',
-        'VZ': 'Verizon', 'CMCSA': 'Comcast', 'BKNG': 'Booking Holdings',
-        'SPOT': 'Spotify', 'SNAP': 'Snap', 'PINS': 'Pinterest',
-        'ZM': 'Zoom', 'DOCU': 'DocuSign', 'ZS': 'Zscaler',
-        'DDOG': 'Datadog', 'MDB': 'MongoDB', 'TEAM': 'Atlassian',
-        'WDAY': 'Workday', 'SHOP': 'Shopify', 'SE': 'Sea Limited',
-        'MELI': 'MercadoLibre', 'NU': 'Nu Holdings', 'TOST': 'Toast',
-        'RIVN': 'Rivian', 'LCID': 'Lucid Motors', 'NIO': 'NIO',
-        'XPEV': 'XPeng', 'LI': 'Li Auto', 'BYDDY': 'BYD',
     },
-    'aziende_emergenti': {
-        'PLTR': 'Palantir', 'SNOW': 'Snowflake', 'CRWD': 'CrowdStrike',
-        'NET': 'Cloudflare', 'DDOG': 'Datadog', 'MDB': 'MongoDB',
-        'ZS': 'Zscaler', 'TEAM': 'Atlassian', 'WDAY': 'Workday',
-        'SHOP': 'Shopify', 'MELI': 'MercadoLibre', 'NU': 'Nu Holdings',
-        'RIVN': 'Rivian', 'LCID': 'Lucid Motors', 'NIO': 'NIO',
-        'XPEV': 'XPeng', 'LI': 'Li Auto', 'COIN': 'Coinbase',
-        'TOST': 'Toast', 'SE': 'Sea Limited', 'PINS': 'Pinterest',
-        'SNAP': 'Snap', 'ZM': 'Zoom', 'DOCU': 'DocuSign',
-    },
+    
     'materie_prime': {
         'XAU/USD': 'Oro', 'XAG/USD': 'Argento', 
         'CL/USD': 'Petrolio WTI', 'NG/USD': 'Gas Naturale',
         'HG/USD': 'Rame',
     },
+    
     'crypto_top': {
         'BTC/USD': 'Bitcoin', 'ETH/USD': 'Ethereum', 'SOL/USD': 'Solana',
     },
+    
     'etf_settoriali': {
-        'XLK': 'ETF Technology', 'XLF': 'ETF Financial', 
-        'XLV': 'ETF Healthcare', 'XLE': 'ETF Energy',
-        'XLI': 'ETF Industrial', 'ARKK': 'ETF Innovation',
-        'SOXX': 'ETF Semiconduttori', 'KWEB': 'ETF Cina Internet',
-        'TAN': 'ETF Energia Solare', 'LIT': 'ETF Litio',
-    }
+        'XLK': 'Technology', 'XLF': 'Financial', 
+        'XLV': 'Healthcare', 'XLE': 'Energy',
+        'XLI': 'Industrial', 'ARKK': 'Innovation',
+        'SOXX': 'Semiconduttori', 'KWEB': 'Cina Internet',
+        'TAN': 'Energia Solare', 'LIT': 'Litio e Batterie',
+        'XLU': 'Utilities', 'XLRE': 'Real Estate',
+        'GLD': 'SPDR Gold Trust', 'IAU': 'iShares Gold Trust',
+    },
 }
 
+# ============================================================================
+# FUNZIONI CACHE E DOWNLOAD (invariate)
+# ============================================================================
+
 def carica_cache():
-    """Carica dati dalla cache se valida"""
     if not cache_valida():
         return None
     
@@ -153,24 +207,22 @@ def carica_cache():
         return None
 
 def salva_cache(dati):
-    """Salva dati nella cache"""
     try:
         with open(CACHE_FILE, 'w') as f:
             json.dump({'timestamp': time.time(), 'dati': dati}, f)
     except Exception as e:
         print(f"Errore salvataggio cache: {e}")
 
-def avvia_background():
-    """Avvia il download solo se siamo in fascia attiva"""
+def avvia_background(forza=False):
     global stato
     
-    # Se siamo di notte, non avviare il download
-    if not in_fascia_attiva():
+    if not in_fascia_attiva() and not forza:
         print("🌙 Fascia notturna: download bloccato")
         return
     
-    if not stato['in_corso'] and not stato['completato']:
-        print("☀️ Fascia attiva: avvio download...")
+    if not stato['in_corso']:
+        stato['completato'] = False
+        print("☀️ Avvio download...")
         t = threading.Thread(target=download_e_elabora, daemon=True)
         t.start()
 
@@ -279,22 +331,79 @@ if cache_iniziale is not None:
 else:
     avvia_background()
 
+# ============================================================================
+# ROUTE
+# ============================================================================
+
 @app.route('/')
 def index():
     return render_template('index.html')
 
 @app.route('/api/status')
 def api_status():
-    """Aggiunge info sulla fascia oraria"""
     stato_extra = stato.copy()
     stato_extra['ora_italiana'] = ottieni_ora_italiana().strftime('%H:%M')
     stato_extra['fascia_attiva'] = in_fascia_attiva()
+    
+    # Info cache per il footer
+    if os.path.exists(CACHE_FILE):
+        eta_file = time.time() - os.path.getmtime(CACHE_FILE)
+        durata = ottieni_cache_duration()
+        stato_extra['cache_eta_secondi'] = int(eta_file)
+        stato_extra['cache_durata_secondi'] = durata
+        stato_extra['prossimo_aggiornamento_secondi'] = tempo_al_prossimo_aggiornamento()
+    else:
+        stato_extra['cache_eta_secondi'] = 0
+        stato_extra['cache_durata_secondi'] = 0
+        stato_extra['prossimo_aggiornamento_secondi'] = 0
+    
     return jsonify(stato_extra)
+
+@app.route('/api/cache-info')
+def api_cache_info():
+    """Info dettagliate sulla cache per il footer"""
+    info = {
+        'ora_italiana': ottieni_ora_italiana().strftime('%H:%M'),
+        'fascia_attiva': in_fascia_attiva(),
+        'cache_presente': os.path.exists(CACHE_FILE),
+    }
+    
+    if os.path.exists(CACHE_FILE):
+        eta = time.time() - os.path.getmtime(CACHE_FILE)
+        durata = ottieni_cache_duration()
+        info['cache_eta_secondi'] = int(eta)
+        info['cache_durata_secondi'] = durata
+        info['prossimo_aggiornamento_secondi'] = tempo_al_prossimo_aggiornamento()
+        info['ultimo_aggiornamento'] = datetime.fromtimestamp(os.path.getmtime(CACHE_FILE)).isoformat()
+    else:
+        info['cache_eta_secondi'] = 0
+        info['cache_durata_secondi'] = 0
+        info['prossimo_aggiornamento_secondi'] = 0
+    
+    return jsonify(info)
+
+@app.route('/api/refresh', methods=['POST'])
+def api_refresh():
+    """Forza un refresh manuale dei dati"""
+    if stato['in_corso']:
+        return jsonify({'status': 'already_running', 'messaggio': 'Aggiornamento già in corso'}), 409
+    
+    if not in_fascia_attiva():
+        return jsonify({
+            'status': 'blocked', 
+            'messaggio': 'Refresh bloccato: fascia notturna (21:00-09:00)'
+        }), 403
+    
+    print("🔄 Refresh manuale richiesto")
+    avvia_background(forza=True)
+    return jsonify({'status': 'started', 'messaggio': 'Aggiornamento avviato'})
+
+# Tutte le route /api/peggiori, /api/migliori, /api/categoria, /api/strategie 
+# rimangono come le hai già (con il controllo in_fascia_attiva)
 
 @app.route('/api/peggiori/<periodo>')
 def api_peggiori(periodo):
     if not stato['completato']:
-        # Se siamo di notte e non ci sono dati, avvisa l'utente
         if not in_fascia_attiva():
             return jsonify({
                 'errore': 'Dati non disponibili',
@@ -305,16 +414,9 @@ def api_peggiori(periodo):
     
     dati = carica_cache()
     if dati is None:
-        if not in_fascia_attiva():
-            return jsonify({
-                'errore': 'Dati non disponibili',
-                'motivo': 'Fascia notturna. Riprova dopo le 09:00.',
-                'fascia_attiva': False
-            }), 503
         avvia_background()
         return jsonify({'in_attesa': True, 'stato': stato}), 202
     
-    # ... resto del codice invariato
     periodo_mappatura = {
         '1s': '1_settimana', '1m': '1_mese', '3m': '3_mesi',
         '6m': '6_mesi', '12m': '12_mesi', '18m': '18_mesi', '24m': '24_mesi'
@@ -356,12 +458,6 @@ def api_migliori(periodo):
     
     dati = carica_cache()
     if dati is None:
-        if not in_fascia_attiva():
-            return jsonify({
-                'errore': 'Dati non disponibili',
-                'motivo': 'Fascia notturna. Riprova dopo le 09:00.',
-                'fascia_attiva': False
-            }), 503
         avvia_background()
         return jsonify({'in_attesa': True, 'stato': stato}), 202
     
@@ -393,7 +489,6 @@ def api_migliori(periodo):
         'titoli': tutti_titoli[:30]
     })
 
-
 @app.route('/api/categoria/<categoria_nome>')
 def api_per_categoria(categoria_nome):
     if not stato['completato']:
@@ -407,12 +502,6 @@ def api_per_categoria(categoria_nome):
     
     dati = carica_cache()
     if dati is None:
-        if not in_fascia_attiva():
-            return jsonify({
-                'errore': 'Dati non disponibili',
-                'motivo': 'Fascia notturna. Riprova dopo le 09:00.',
-                'fascia_attiva': False
-            }), 503
         avvia_background()
         return jsonify({'in_attesa': True, 'stato': stato}), 202
     
@@ -424,10 +513,8 @@ def api_per_categoria(categoria_nome):
         'titoli': dati[categoria_nome]
     })
 
-
 @app.route('/api/strategie')
 def api_strategie():
-    """Restituisce i titoli suddivisi per strategia"""
     if not stato['completato']:
         if not in_fascia_attiva():
             return jsonify({
@@ -439,12 +526,6 @@ def api_strategie():
     
     dati = carica_cache()
     if dati is None:
-        if not in_fascia_attiva():
-            return jsonify({
-                'errore': 'Dati non disponibili',
-                'motivo': 'Fascia notturna. Riprova dopo le 09:00.',
-                'fascia_attiva': False
-            }), 503
         avvia_background()
         return jsonify({'in_attesa': True, 'stato': stato}), 202
     
@@ -455,12 +536,11 @@ def api_strategie():
     
     strategie = {}
     
-    # 1. MEAN REVERSION: titoli famosi crollati oltre -10% a 6 mesi
     mean_reversion = []
     for t in tutti_titoli:
         var_6m = t['variazioni'].get('6_mesi')
         if var_6m is not None and var_6m < -10:
-            if t['categoria'] in ['top_100_usa', 'indici_globali']:
+            if t['categoria'] in ['top_100_usa', 'indici_globali', 'etf_europei', 'etf_usa_principali']:
                 mean_reversion.append({
                     'ticker': t['ticker'],
                     'nome': t['nome'],
@@ -471,7 +551,6 @@ def api_strategie():
     mean_reversion.sort(key=lambda x: x['variazione'])
     strategie['mean_reversion'] = mean_reversion[:10]
     
-    # 2. MOMENTUM: titoli in forte crescita (oltre +15% a 6 mesi)
     momentum = []
     for t in tutti_titoli:
         var_6m = t['variazioni'].get('6_mesi')
@@ -486,12 +565,11 @@ def api_strategie():
     momentum.sort(key=lambda x: x['variazione'], reverse=True)
     strategie['momentum'] = momentum[:10]
     
-    # 3. CONTRARIAN: mercati emergenti o indici in forte calo
     contrarian = []
     for t in tutti_titoli:
         var_3m = t['variazioni'].get('3_mesi')
         if var_3m is not None and var_3m < -8:
-            if t['categoria'] in ['mercati_emergenti', 'indici_globali', 'etf_settoriali']:
+            if t['categoria'] in ['mercati_emergenti', 'indici_globali', 'etf_settoriali', 'etf_europei']:
                 contrarian.append({
                     'ticker': t['ticker'],
                     'nome': t['nome'],
@@ -502,7 +580,6 @@ def api_strategie():
     contrarian.sort(key=lambda x: x['variazione'])
     strategie['contrarian'] = contrarian[:10]
     
-    # 4. FLIGHT TO QUALITY: mega cap con performance positiva o stabile
     flight_quality = []
     mega_cap_tickers = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'BRK-B', 'JPM', 'V', 'UNH']
     for t in tutti_titoli:
