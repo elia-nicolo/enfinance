@@ -308,3 +308,111 @@ function mostraCategoria(dati) {
     html += `</tbody></table>`;
     document.getElementById('contenuto').innerHTML = html;
 }
+
+// ============================================================================
+// GESTIONE FOOTER E REFRESH
+// ============================================================================
+
+let footerInterval = null;
+let prossimoAggiornamentoSecondi = 0;
+
+function formattaTempo(secondi) {
+    if (secondi <= 0) return 'Ora';
+    if (secondi < 60) return `${secondi}s`;
+    if (secondi < 3600) return `${Math.floor(secondi/60)}m ${secondi%60}s`;
+    const ore = Math.floor(secondi / 3600);
+    const min = Math.floor((secondi % 3600) / 60);
+    return `${ore}h ${min}m`;
+}
+
+function formattaData(isoString) {
+    if (!isoString) return '-';
+    const d = new Date(isoString);
+    return d.toLocaleString('it-IT', { 
+        day: '2-digit', month: '2-digit', year: 'numeric',
+        hour: '2-digit', minute: '2-digit'
+    });
+}
+
+async function aggiornaFooter() {
+    try {
+        const response = await fetch('/api/cache-info');
+        const info = await response.json();
+        
+        document.getElementById('footer-ultimo').textContent = 
+            formattaData(info.ultimo_aggiornamento);
+        
+        document.getElementById('footer-fascia').textContent = 
+            info.fascia_attiva ? '☀️ Attiva (9-21)' : '🌙 Notturna';
+        
+        prossimoAggiornamentoSecondi = info.prossimo_aggiornamento_secondi;
+        aggiornaCountdown();
+        
+        // Avvia countdown se non è già attivo
+        if (!footerInterval) {
+            footerInterval = setInterval(() => {
+                prossimoAggiornamentoSecondi--;
+                if (prossimoAggiornamentoSecondi < 0) prossimoAggiornamentoSecondi = 0;
+                aggiornaCountdown();
+                
+                // Se arriva a 0, ricarica la pagina
+                if (prossimoAggiornamentoSecondi === 0) {
+                    clearInterval(footerInterval);
+                    footerInterval = null;
+                    location.reload();
+                }
+            }, 1000);
+        }
+    } catch (e) {
+        console.error('Errore footer:', e);
+    }
+}
+
+function aggiornaCountdown() {
+    const el = document.getElementById('footer-prossimo');
+    if (el) {
+        el.textContent = formattaTempo(prossimoAggiornamentoSecondi);
+    }
+}
+
+async function forzaRefresh() {
+    const btn = document.getElementById('btn-refresh');
+    if (btn.disabled) return;
+    
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btn.textContent = '⏳ Aggiornamento in corso...';
+    
+    try {
+        const response = await fetch('/api/refresh', { method: 'POST' });
+        const data = await response.json();
+        
+        if (data.status === 'started') {
+            btn.textContent = '✅ Avviato, attendi 2-3 min...';
+            // Mostra messaggio di attesa
+            setTimeout(() => {
+                btn.disabled = false;
+                btn.classList.remove('loading');
+                btn.textContent = '🔄 Aggiorna ora';
+                location.reload();
+            }, 120000); // ricarica dopo 2 min
+        } else {
+            alert(data.messaggio);
+            btn.disabled = false;
+            btn.classList.remove('loading');
+            btn.textContent = '🔄 Aggiorna ora';
+        }
+    } catch (error) {
+        alert('Errore: ' + error.message);
+        btn.disabled = false;
+        btn.classList.remove('loading');
+        btn.textContent = '🔄 Aggiorna ora';
+    }
+}
+
+// Avvia aggiornamento footer quando il documento è pronto
+document.addEventListener('DOMContentLoaded', () => {
+    aggiornaFooter();
+    // Aggiorna info footer ogni 30 secondi
+    setInterval(aggiornaFooter, 60000);
+});
