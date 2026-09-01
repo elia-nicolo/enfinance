@@ -315,6 +315,7 @@ function mostraCategoria(dati) {
 
 let footerInterval = null;
 let prossimoAggiornamentoSecondi = 0;
+let ultimiDatiFooter = null;
 
 function formattaTempo(secondi) {
     if (secondi <= 0) return 'Ora';
@@ -345,7 +346,18 @@ async function aggiornaFooter() {
         document.getElementById('footer-fascia').textContent = 
             info.fascia_attiva ? '☀️ Attiva (9-21)' : '🌙 Notturna';
         
-        prossimoAggiornamentoSecondi = info.prossimo_aggiornamento_secondi;
+        // ⚠️ FIX: Se il backend dice 0 ma non è davvero scaduto, non ricaricare
+        if (info.prossimo_aggiornamento_secondi === 0) {
+            // Se era già 0, ignora (evita loop)
+            if (prossimoAggiornamentoSecondi === 0) {
+                document.getElementById('footer-prossimo').textContent = 'Attendere...';
+                return;
+            }
+            prossimoAggiornamentoSecondi = 10; // Minimo 10 secondi prima del reload
+        } else {
+            prossimoAggiornamentoSecondi = info.prossimo_aggiornamento_secondi;
+        }
+        
         aggiornaCountdown();
         
         // Avvia countdown se non è già attivo
@@ -355,23 +367,32 @@ async function aggiornaFooter() {
                 if (prossimoAggiornamentoSecondi < 0) prossimoAggiornamentoSecondi = 0;
                 aggiornaCountdown();
                 
-                // Se arriva a 0, ricarica la pagina
+                // ⚠️ FIX: Ricarica SOLO se davvero scaduto E dopo un cooldown
                 if (prossimoAggiornamentoSecondi === 0) {
                     clearInterval(footerInterval);
                     footerInterval = null;
-                    location.reload();
+                    
+                    // Attendi 5 secondi prima di ricaricare (evita loop)
+                    setTimeout(() => {
+                        location.reload();
+                    }, 5000);
                 }
             }, 1000);
         }
     } catch (e) {
         console.error('Errore footer:', e);
+        document.getElementById('footer-prossimo').textContent = 'Errore';
     }
 }
 
 function aggiornaCountdown() {
     const el = document.getElementById('footer-prossimo');
     if (el) {
-        el.textContent = formattaTempo(prossimoAggiornamentoSecondi);
+        if (prossimoAggiornamentoSecondi === 0) {
+            el.textContent = 'Aggiornamento...';
+        } else {
+            el.textContent = formattaTempo(prossimoAggiornamentoSecondi);
+        }
     }
 }
 
