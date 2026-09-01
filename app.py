@@ -47,19 +47,26 @@ def cache_valida():
 def tempo_al_prossimo_aggiornamento():
     """Restituisce i secondi mancanti al prossimo aggiornamento"""
     if not os.path.exists(CACHE_FILE):
-        return 0
+        return 3600  # 1 ora se non c'è cache (evita loop)
     
-    eta_file = time.time() - os.path.getmtime(CACHE_FILE)
-    durata_massima = ottieni_cache_duration()
-    rimanenti = durata_massima - eta_file
-    
-    if not in_fascia_attiva():
-        # Calcola secondi fino alle 9:00 di domani
-        ora = ottieni_ora_italiana()
-        secondi_mancanti = (24 - ora.hour + 9) * 3600 - ora.minute * 60 - ora.second
-        return max(0, secondi_mancanti)
-    
-    return max(0, int(rimanenti))
+    try:
+        eta_file = time.time() - os.path.getmtime(CACHE_FILE)
+        durata_massima = ottieni_cache_duration()
+        rimanenti = durata_massima - eta_file
+        
+        if not in_fascia_attiva():
+            # Se siamo di notte, calcola fino alle 9 di domani
+            ora = ottieni_ora_italiana()
+            secondi_mancanti = (24 - ora.hour + 9) * 3600 - ora.minute * 60 - ora.second
+            return max(60, secondi_mancanti)  # Minimo 60 secondi
+        
+        # ⚠️ FIX: Se la cache è scaduta ma non aggiornata, attendi
+        if rimanenti <= 0:
+            return 3600  # Attendi 1 ora se il refresh non è ancora partito
+        
+        return max(60, int(rimanenti))  # Minimo 60 secondi
+    except:
+        return 3600
 
 TWELVE_DATA_API_KEY = os.environ.get('TWELVE_DATA_API_KEY', 'b14ba2a7063447738bd8b353bbf39b1c')
 
@@ -377,8 +384,8 @@ def api_cache_info():
         info['ultimo_aggiornamento'] = datetime.fromtimestamp(os.path.getmtime(CACHE_FILE)).isoformat()
     else:
         info['cache_eta_secondi'] = 0
-        info['cache_durata_secondi'] = 0
-        info['prossimo_aggiornamento_secondi'] = 0
+        info['cache_durata_secondi'] = ottieni_cache_duration()
+        info['prossimo_aggiornamento_secondi'] = 3600  # ⚠️ Non 0!
     
     return jsonify(info)
 
