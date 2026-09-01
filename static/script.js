@@ -1,7 +1,40 @@
 let tabCorrente = 'peggiori';
 let periodoCorrente = '3m';
-let categoriaCorrente = 'indici_sviluppati';
+let categoriaCorrente = 'indici_globali';
 let pollingTimer = null;
+
+const STRATEGIE_INFO = {
+    'mean_reversion': {
+        'icona': '📉',
+        'titolo': 'Mean Reversion (Ritorno alla Media)',
+        'descrizione': 'Titoli famosi che sono crollati oltre il 10% negli ultimi 6 mesi. La teoria dice che il prezzo tende a tornare verso la media storica. Questi potrebbero essere opportunità di acquisto a sconto, ma attenzione alle "value trap" (aziende che crollano per problemi reali).'
+    },
+    'momentum': {
+        'icona': '📈',
+        'titolo': 'Momentum (Segui il Trend)',
+        'descrizione': 'Titoli in forte crescita (oltre +15% in 6 mesi). La strategia momentum sfrutta la tendenza dei mercati a continuare nella stessa direzione. Ideale per investimenti a breve-medio termine, ma attenzione alle bolle speculative.'
+    },
+    'contrarian': {
+        'icona': '🔄',
+        'titolo': 'Contrarian (Vai Contro il Mercato)',
+        'descrizione': 'Indici e mercati emergenti in forte difficoltà negli ultimi 3 mesi. Quando tutti vendono in preda al panico, spesso è il momento migliore per comprare a sconto. Strategia ad alto rischio ma con potenziali rendimenti elevati.'
+    },
+    'flight_quality': {
+        'icona': '🛡️',
+        'titolo': 'Flight to Quality (Rifugio Sicuro)',
+        'descrizione': 'Le mega-cap che resistono alle correzioni di mercato. Quando i mercati sono volatili, i capitali istituzionali si spostano verso queste aziende solide. Ideale per proteggere il capitale nei periodi di incertezza.'
+    }
+};
+
+const CATEGORIE_NOMI = {
+    'indici_globali': 'Indici Globali',
+    'mercati_emergenti': 'Mercati Emergenti',
+    'top_100_usa': 'Top 100 USA',
+    'aziende_emergenti': 'Aziende Emergenti',
+    'materie_prime': 'Materie Prime',
+    'crypto_top': 'Crypto Top',
+    'etf_settoriali': 'ETF Settoriali'
+};
 
 document.addEventListener('DOMContentLoaded', () => {
     setupEventListeners();
@@ -29,15 +62,24 @@ function setupEventListeners() {
             caricaDati();
         });
     }
-    
-    const closeBtn = document.querySelector('.close');
-    if (closeBtn) {
-        closeBtn.addEventListener('click', chiudiModal);
+}
+
+function creaLinkEsterno(ticker) {
+    // Pulisce il ticker per Yahoo Finance
+    let yahooTicker = ticker;
+    if (ticker.includes('/USD')) {
+        // Per crypto e forex, usa un link diverso
+        const base = ticker.replace('/USD', '');
+        return `https://www.google.com/finance/quote/${base}-USD`;
     }
-    
-    window.addEventListener('click', (e) => {
-        if (e.target.id === 'chart-modal') chiudiModal();
-    });
+    if (ticker.startsWith('^')) {
+        yahooTicker = ticker.replace('^', '%5E');
+    }
+    return `https://finance.yahoo.com/quote/${yahooTicker}`;
+}
+
+function linkTicker(ticker, nome) {
+    return `<a href="${creaLinkEsterno(ticker)}" target="_blank" class="ticker-link" title="Apri grafico su Yahoo Finance">${ticker}</a>`;
 }
 
 async function controllaStato() {
@@ -46,9 +88,22 @@ async function controllaStato() {
     try {
         const response = await fetch('/api/status');
         const stato = await response.json();
+
+        if (stato.fascia_attiva === false && !stato.completato) {
+            contenuto.innerHTML = `
+                <div class="loading">
+                    <div style="font-size: 2em; margin-bottom: 20px;">🌙</div>
+                    <p style="font-size: 1.2em; margin-bottom: 10px;">Fascia notturna</p>
+                    <p style="color: #666; font-size: 0.95em;">
+                        I dati vengono aggiornati solo tra le 09:00 e le 21:00.<br>
+                        Riprova dopo le 09:00 per dati freschi.
+                    </p>
+                </div>
+            `;
+            return;
+        }
         
         if (stato.completato) {
-            // Dati pronti, carica la vista
             contenuto.innerHTML = '';
             if (pollingTimer) {
                 clearTimeout(pollingTimer);
@@ -56,20 +111,18 @@ async function controllaStato() {
             }
             caricaDati();
         } else if (stato.in_corso) {
-            // Ancora in caricamento
             const progresso = stato.progresso || 0;
             contenuto.innerHTML = `
                 <div class="loading">
                     <div style="font-size: 2em; margin-bottom: 20px;">📊</div>
                     <p style="font-size: 1.2em; margin-bottom: 10px;">Caricamento dati in corso...</p>
-                    <p style="color: #666; font-size: 0.95em;">Primo avvio: 1-3 minuti. Poi la cache rende tutto istantaneo.</p>
+                    <p style="color: #666; font-size: 0.95em;">Primo avvio: circa 10 minuti. Poi tutto diventa istantaneo.</p>
                     <div style="margin-top: 20px; background: #e5e5e5; border-radius: 4px; height: 6px; width: 300px; margin: 20px auto;">
                         <div style="background: #1a1a1a; height: 100%; width: ${progresso}%; border-radius: 4px; transition: width 0.5s;"></div>
                     </div>
                     <p style="color: #999; font-size: 0.85em;">${progresso}%</p>
                 </div>
             `;
-            // Riprova tra 3 secondi
             pollingTimer = setTimeout(controllaStato, 3000);
         } else if (stato.errore) {
             contenuto.innerHTML = `
@@ -80,19 +133,13 @@ async function controllaStato() {
                 </div>
             `;
         } else {
-            // Stato iniziale
-            contenuto.innerHTML = `
-                <div class="loading">
-                    <p>Inizializzazione...</p>
-                </div>
-            `;
+            contenuto.innerHTML = `<div class="loading">Inizializzazione...</div>`;
             pollingTimer = setTimeout(controllaStato, 2000);
         }
     } catch (error) {
         contenuto.innerHTML = `
             <div class="loading">
-                <p style="color: #c13224;">❌ Errore di connessione al server</p>
-                <p style="color: #666; margin-top: 10px;">Riprova tra qualche secondo...</p>
+                <p style="color: #c13224;">❌ Errore di connessione</p>
             </div>
         `;
         pollingTimer = setTimeout(controllaStato, 5000);
@@ -104,9 +151,10 @@ function cambiaTab(tab) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
     document.querySelector(`[data-tab="${tab}"]`).classList.add('active');
     
-    document.getElementById('controls-peggiori').style.display = tab === 'peggiori' ? 'block' : 'none';
-    document.getElementById('controls-migliori').style.display = tab === 'migliori' ? 'block' : 'none';
-    document.getElementById('controls-categorie').style.display = tab === 'categorie' ? 'block' : 'none';
+    document.getElementById('controls-periodo').style.display = 
+        (tab === 'peggiori' || tab === 'migliori') ? 'block' : 'none';
+    document.getElementById('controls-categorie').style.display = 
+        (tab === 'categorie') ? 'block' : 'none';
     
     caricaDati();
 }
@@ -118,13 +166,12 @@ async function caricaDati() {
         let url;
         if (tabCorrente === 'peggiori') url = `/api/peggiori/${periodoCorrente}`;
         else if (tabCorrente === 'migliori') url = `/api/migliori/${periodoCorrente}`;
-        else if (tabCorrente === 'capitalizzati') url = '/api/top-capitalizzati';
+        else if (tabCorrente === 'strategie') url = '/api/strategie';
         else if (tabCorrente === 'categorie') url = `/api/categoria/${categoriaCorrente}`;
         
         const response = await fetch(url);
         
         if (response.status === 202) {
-            // Dati non ancora pronti
             controllaStato();
             return;
         }
@@ -137,7 +184,7 @@ async function caricaDati() {
         
         if (tabCorrente === 'peggiori') mostraClassifica(dati, 'Peggiori Performer');
         else if (tabCorrente === 'migliori') mostraClassifica(dati, 'Migliori Performer');
-        else if (tabCorrente === 'capitalizzati') mostraCapitalizzati(dati);
+        else if (tabCorrente === 'strategie') mostraStrategie(dati);
         else if (tabCorrente === 'categorie') mostraCategoria(dati);
         
         document.getElementById('update-info').textContent = 
@@ -155,67 +202,92 @@ function mostraClassifica(dati, titolo) {
     
     let html = `<h2 style="margin-bottom: 20px; font-weight: 400;">${titolo} - ${periodoNomi[dati.periodo]}</h2>`;
     html += `<table><thead><tr>
-        <th>Ticker</th><th>Nome</th><th>Categoria</th><th>Prezzo</th><th>Variazione</th><th></th>
+        <th>Ticker</th><th>Nome</th><th>Categoria</th><th>Prezzo</th><th>Variazione</th><th>Grafico</th>
     </tr></thead><tbody>`;
     
     dati.titoli.forEach(titolo => {
         const classe = titolo.variazione >= 0 ? 'positive' : 'negative';
         const simbolo = titolo.variazione >= 0 ? '▲' : '▼';
+        const catNome = CATEGORIE_NOMI[titolo.categoria] || titolo.categoria;
+        
         html += `<tr>
-            <td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')">${titolo.ticker}</a></td>
+            <td>${linkTicker(titolo.ticker, titolo.nome)}</td>
             <td>${titolo.nome}</td>
-            <td>${titolo.categoria}</td>
+            <td>${catNome}</td>
             <td>$${titolo.prezzo || 'N/A'}</td>
             <td class="${classe}">${simbolo} ${titolo.variazione}%</td>
-            <td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')" title="Apri grafico">📊</a></td>
+            <td><a href="${creaLinkEsterno(titolo.ticker)}" target="_blank" class="external-link" title="Apri grafico">📊 Apri</a></td>
         </tr>`;
     });
     
     html += `</tbody></table>`;
     html += `<div class="insight-box">
-        <h3>Insight</h3>
-        <p>Totale titoli analizzati: ${dati.totale_titoli}. Clicca su un ticker o sull'icona 📊 per vedere il grafico completo.</p>
+        <h3>💡 Insight</h3>
+        <p>Totale titoli analizzati: ${dati.totale_titoli}. Clicca su un ticker per vedere il grafico completo su Yahoo Finance.</p>
     </div>`;
     
     document.getElementById('contenuto').innerHTML = html;
 }
 
-function mostraCapitalizzati(dati) {
-    let html = `<h2 style="margin-bottom: 20px; font-weight: 400;">Top 50 per Capitalizzazione</h2>`;
-    html += `<table><thead><tr>
-        <th>Ticker</th><th>Nome</th><th>Prezzo</th><th>Market Cap</th><th>6M</th><th>12M</th><th></th>
-    </tr></thead><tbody>`;
+function mostraStrategie(dati) {
+    let html = `<h2 style="margin-bottom: 30px; font-weight: 400;">📊 Strategie di Investimento</h2>`;
     
-    dati.forEach(titolo => {
-        const marketCapB = (titolo.market_cap / 1e9).toFixed(2);
-        const classe6m = titolo.variazione_6m >= 0 ? 'positive' : 'negative';
-        const classe12m = titolo.variazione_12m >= 0 ? 'positive' : 'negative';
+    const ordine = ['mean_reversion', 'momentum', 'contrarian', 'flight_quality'];
+    
+    ordine.forEach(key => {
+        const info = STRATEGIE_INFO[key];
+        const titoli = dati[key] || [];
         
-        html += `<tr>
-            <td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')">${titolo.ticker}</a></td>
-            <td>${titolo.nome}</td>
-            <td>$${titolo.prezzo || 'N/A'}</td>
-            <td>$${marketCapB}B</td>
-            <td class="${classe6m}">${titolo.variazione_6m || 0}%</td>
-            <td class="${classe12m}">${titolo.variazione_12m || 0}%</td>
-            <td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')" title="Apri grafico">📊</a></td>
-        </tr>`;
+        html += `
+        <div class="strategy-section">
+            <div class="strategy-header">
+                <div class="strategy-icon">${info.icona}</div>
+                <div>
+                    <div class="strategy-title">${info.titolo}</div>
+                </div>
+            </div>
+            <p class="strategy-description">${info.descrizione}</p>
+        `;
+        
+        if (titoli.length > 0) {
+            html += `<div class="strategy-tickers">`;
+            titoli.forEach(t => {
+                const classe = t.variazione >= 0 ? 'positive' : 'negative';
+                html += `
+                <div class="strategy-ticker">
+                    <span class="ticker-name">${linkTicker(t.ticker, t.nome)}</span>
+                    <span class="ticker-var ${classe}">${t.variazione >= 0 ? '▲' : '▼'} ${t.variazione}%</span>
+                </div>
+                `;
+            });
+            html += `</div>`;
+        } else {
+            html += `<p style="color: #999; font-style: italic;">Nessun titolo attualmente rientra in questa strategia con i criteri attuali.</p>`;
+        }
+        
+        html += `</div>`;
     });
     
-    html += `</tbody></table>`;
+    html += `<div class="insight-box">
+        <h3>⚠️ Disclaimer</h3>
+        <p>Queste strategie sono basate su criteri matematici automatici. Non costituiscono consulenza finanziaria. Verifica sempre i fondamentali aziendali e la tua tolleranza al rischio prima di investire.</p>
+    </div>`;
+    
     document.getElementById('contenuto').innerHTML = html;
 }
 
 function mostraCategoria(dati) {
-    let html = `<h2 style="margin-bottom: 20px; font-weight: 400;">${dati.categoria.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}</h2>`;
+    const catNome = CATEGORIE_NOMI[dati.categoria] || dati.categoria;
+    
+    let html = `<h2 style="margin-bottom: 20px; font-weight: 400;">${catNome}</h2>`;
     html += `<table><thead><tr>
         <th>Ticker</th><th>Nome</th><th>Prezzo</th>
-        <th>1S</th><th>1M</th><th>3M</th><th>6M</th><th>12M</th><th>24M</th><th></th>
+        <th>1S</th><th>1M</th><th>3M</th><th>6M</th><th>12M</th><th>24M</th><th>Grafico</th>
     </tr></thead><tbody>`;
     
     dati.titoli.forEach(titolo => {
         html += `<tr>
-            <td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')">${titolo.ticker}</a></td>
+            <td>${linkTicker(titolo.ticker, titolo.nome)}</td>
             <td>${titolo.nome}</td>
             <td>$${titolo.prezzo_attuale || 'N/A'}</td>`;
         
@@ -229,44 +301,10 @@ function mostraCategoria(dati) {
             }
         });
         
-        html += `<td><a class="ticker-link" onclick="apriGrafico('${titolo.ticker}', '${titolo.nome}')" title="Apri grafico">📊</a></td>`;
+        html += `<td><a href="${creaLinkEsterno(titolo.ticker)}" target="_blank" class="external-link">📊</a></td>`;
         html += `</tr>`;
     });
     
     html += `</tbody></table>`;
     document.getElementById('contenuto').innerHTML = html;
-}
-
-function apriGrafico(ticker, nome) {
-    document.getElementById('chart-title').textContent = `${nome} (${ticker})`;
-    
-    const container = document.getElementById('chart-container');
-    container.innerHTML = `<div class="tradingview-widget-container">
-        <div id="tradingview_chart"></div>
-        <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
-        <script type="text/javascript">
-        new TradingView.widget({
-            "width": "100%",
-            "height": 600,
-            "symbol": "${ticker}",
-            "interval": "D",
-            "timezone": "Europe/Rome",
-            "theme": "light",
-            "style": "1",
-            "locale": "it",
-            "toolbar_bg": "#fafafa",
-            "enable_publishing": false,
-            "hide_side_toolbar": false,
-            "allow_symbol_change": true,
-            "container_id": "tradingview_chart"
-        });
-        </script>
-    </div>`;
-    
-    document.getElementById('chart-modal').style.display = 'block';
-}
-
-function chiudiModal() {
-    document.getElementById('chart-modal').style.display = 'none';
-    document.getElementById('chart-container').innerHTML = '';
 }
