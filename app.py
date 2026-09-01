@@ -3,18 +3,21 @@ import yfinance as yf
 import json
 import os
 import time
-from datetime import datetime, timedelta
-from concurrent.futures import ThreadPoolExecutor
-import requests
+import threading
+from datetime import datetime
 
 app = Flask(__name__)
 
 CACHE_FILE = 'cache_dati.json'
 CACHE_DURATION = 900  # 15 minuti
 
-# Headers per evitare blocchi da Yahoo
-HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+# Stato globale del caricamento
+stato = {
+    'in_corso': False, 
+    'completato': False, 
+    'errore': None, 
+    'progresso': 0,
+    'ultimo_aggiornamento': None
 }
 
 TICKERS = {
@@ -70,136 +73,166 @@ TICKERS = {
 }
 
 def carica_cache():
+    """Carica dati dalla cache se valida"""
     if os.path.exists(CACHE_FILE):
         try:
             with open(CACHE_FILE, 'r') as f:
                 data = json.load(f)
                 if time.time() - data.get('timestamp', 0) < CACHE_DURATION:
-                    print("✅ Cache caricata")
                     return data['dati']
         except Exception as e:
-            print(f"Errore cache: {e}")
+            print(f"Errore lettura cache: {e}")
     return None
 
 def salva_cache(dati):
+    """Salva dati nella cache"""
     try:
         with open(CACHE_FILE, 'w') as f:
-            json.dump({'timestamp': time.time(), 'dati': dati}, f)
+            json.dump({
+                'timestamp': time.time(), 
+                'dati': dati
+            }, f)
+        print("✅ Cache salvata")
     except Exception as e:
         print(f"Errore salvataggio cache: {e}")
 
-def ottieni_prezzo_attuale(ticker_obj):
-    """Ottiene il prezzo attuale in modo robusto"""
-    try:
-        hist = ticker_obj.history(period='1d')
-        if not hist.empty:
-            return float(hist['Close'].iloc[-1])
-    except:
-        pass
+def download_e_elabora():
+    """Scarica TUTTI i dati in una singola richiesta batch"""
+    global stato
     
     try:
-        info = ticker_obj.info
-        for key in ['regularMarketPrice', 'currentPrice', 'previousClose']:
-            if key in info and info[key]:
-                return float(info[key])
-    except:
-        pass
-    
-    return None
-
-def calcola_variazione(ticker_symbol, giorni):
-    try:
-        session = requests.Session()
-        session.headers.update(HEADERS)
-        ticker = yf.Ticker(ticker_symbol, session=session)
+        stato['in_corso'] = True
+        stato['errore'] = None
+        stato['progresso'] = 10
         
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=giorni + 15)
-        hist = ticker.history(start=start_date, end=end_date, interval='1d')
+        # Costruisci mappa ticker -> (nome, categoria)
+        ticker_map = {}
+        for cat, tickers in TICKERS.items():
+            for t, nome in tickers.items():
+                ticker_map[t] = (nome, cat)
         
-        if hist.empty or len(hist) < 2:
-            return None
+        ticker_list = list(ticker_map.keys())
+        print(f"🔄 Download batch di {len(ticker_list)} ticker...")
         
-        prezzo_iniziale = float(hist['Close'].iloc[0])
-        prezzo_finale = float(hist['Close'].iloc[-1])
+        # UNA SOLA RICHIESTA per tutti i ticker (invece di centinaia)
+        data = yf.download(
+            ticker_list,
+            period="2y",
+            interval="1d",
+            group_by='ticker',
+            auto_adjust=True,
+            threads=True,
+            progress=False
+        )
         
-        if prezzo_iniziale == 0:
-            return None
+        stato['progresso'] = 40
+        print(f"✅ Download completato. Shape: {data.shape}")
         
-        return round(((prezzo_finale - prezzo_iniziale) / prezzo_iniziale) * 100, 2)
-    except Exception as e:
-        print(f"⚠️ Errore calcolo {ticker_symbol} ({giorni}g): {str(e)[:50]}")
-        return None
-
-def ottieni_dati_ticker(ticker_symbol, nome, categoria):
-    try:
-        session = requests.Session()
-        session.headers.update(HEADERS)
-        ticker = yf.Ticker(ticker_symbol, session=session)
+        if data.empty:
+            raise Exception("Nessun dato ricevuto da Yahoo Finance")
         
-        prezzo_attuale = ottieni_prezzo_attuale(ticker)
-        
-        market_cap = None
-        try:
-            info = ticker.info
-            market_cap = info.get('marketCap', None)
-        except:
-            pass
-        
-        periodi = {
-            '1_settimana': 7, '1_mese': 30, '3_mesi': 90,
-            '6_mesi': 180, '12_mesi': 365, '18_mesi': 540, '24_mesi': 730
+        # Giorni di TRADING per periodo (non di calendario)
+        periodi_trading = {
+            '1_settimana': 5,
+            '1_mese': 21,
+            '3_mesi': 63,
+            '6_mesi': 126,
+            '12_mesi': 252,
+            '18_mesi': 378,
+            '24_mesi': 504
         }
         
-        variazioni = {}
-        for periodo_nome, giorni in periodi.items():
-            variazioni[periodo_nome] = calcola_variazione(ticker_symbol, giorni)
+        risultati = {cat: [] for cat in TICKERS}
         
-        return {
-            'ticker': ticker_symbol,
-            'nome': nome,
-            'categoria': categoria,
-            'prezzo_attuale': round(prezzo_attuale, 2) if prezzo_attuale else None,
-            'market_cap': market_cap,
-            'variazioni': variazioni
-        }
-    except Exception as e:
-        print(f"❌ Errore {ticker_symbol}: {str(e)[:100]}")
-        return None
-
-def ottieni_tutti_i_dati():
-    cached = carica_cache()
-    if cached:
-        return cached
-    
-    print("🔄 Scaricamento dati in corso...")
-    risultati = {}
-    totale_falliti = 0
-    
-    for categoria, tickers in TICKERS.items():
-        risultati[categoria] = []
-        
-        with ThreadPoolExecutor(max_workers=5) as executor:  # Ridotto da 15 a 5 per evitare rate-limit
-            futures = []
-            for ticker, nome in tickers.items():
-                future = executor.submit(ottieni_dati_ticker, ticker, nome, categoria)
-                futures.append((ticker, future))
-            
-            for ticker, future in futures:
-                try:
-                    result = future.result(timeout=30)
-                    if result and result.get('prezzo_attuale'):
-                        risultati[categoria].append(result)
+        for ticker_symbol in ticker_list:
+            try:
+                # Gestione DataFrame MultiIndex
+                if isinstance(data.columns, pd.MultiIndex):
+                    if ticker_symbol not in data.columns.get_level_values(0):
+                        continue
+                    hist = data[ticker_symbol]
+                else:
+                    hist = data
+                
+                if 'Close' not in hist.columns:
+                    continue
+                
+                closes = hist['Close'].dropna()
+                if len(closes) < 5:
+                    continue
+                
+                prezzo_attuale = round(float(closes.iloc[-1]), 2)
+                
+                # Calcola tutte le variazioni dalla stessa serie storica
+                variazioni = {}
+                for nome_p, giorni_t in periodi_trading.items():
+                    if len(closes) > giorni_t:
+                        p_iniz = float(closes.iloc[-giorni_t])
+                        p_fin = float(closes.iloc[-1])
+                        if p_iniz != 0:
+                            variazioni[nome_p] = round(((p_fin - p_iniz) / p_iniz) * 100, 2)
+                        else:
+                            variazioni[nome_p] = None
                     else:
-                        totale_falliti += 1
-                        print(f"⚠️ Nessun dato per {ticker}")
-                except Exception as e:
-                    totale_falliti += 1
-                    print(f"❌ Timeout/Errore per {ticker}: {str(e)[:50]}")
-    
-    print(f"✅ Caricamento completato. Successi: {sum(len(v) for v in risultati.values())}, Falliti: {totale_falliti}")
-    salva_cache(risultati)
-    return risultati
+                        variazioni[nome_p] = None
+                
+                nome, categoria = ticker_map[ticker_symbol]
+                
+                # Market cap (opzionale, veloce)
+                market_cap = None
+                try:
+                    fast = yf.Ticker(ticker_symbol).fast_info
+                    market_cap = getattr(fast, 'market_cap', None)
+                except:
+                    pass
+                
+                risultati[categoria].append({
+                    'ticker': ticker_symbol,
+                    'nome': nome,
+                    'categoria': categoria,
+                    'prezzo_attuale': prezzo_attuale,
+                    'market_cap': market_cap,
+                    'variazioni': variazioni
+                })
+                
+            except Exception as e:
+                print(f"⚠️ Errore elaborazione {ticker_symbol}: {e}")
+                continue
+        
+        stato['progresso'] = 90
+        
+        # Conta i risultati
+        totale = sum(len(v) for v in risultati.values())
+        print(f"✅ Elaborati {totale} ticker con successo")
+        
+        salva_cache(risultati)
+        
+        stato['completato'] = True
+        stato['progresso'] = 100
+        stato['ultimo_aggiornamento'] = datetime.now().isoformat()
+        
+    except Exception as e:
+        print(f"❌ Errore nel download: {e}")
+        stato['errore'] = str(e)
+    finally:
+        stato['in_corso'] = False
+
+def avvia_background():
+    """Avvia il download in un thread di background"""
+    if not stato['in_corso'] and not stato['completato']:
+        print("🚀 Avvio download in background...")
+        t = threading.Thread(target=download_e_elabora, daemon=True)
+        t.start()
+
+# All'avvio: prova la cache, altrimenti avvia download
+cache_iniziale = carica_cache()
+if cache_iniziale is not None:
+    stato['completato'] = True
+    stato['progresso'] = 100
+    stato['ultimo_aggiornamento'] = datetime.fromtimestamp(os.path.getmtime(CACHE_FILE)).isoformat()
+    print("✅ Cache caricata all'avvio")
+else:
+    avvia_background()
 
 # ============================================================================
 # ROUTE
@@ -209,28 +242,29 @@ def ottieni_tutti_i_dati():
 def index():
     return render_template('index.html')
 
-@app.route('/api/health')
-def health():
-    """Endpoint per verificare che il server funzioni"""
-    return jsonify({
-        'status': 'ok',
-        'timestamp': datetime.now().isoformat(),
-        'cache_exists': os.path.exists(CACHE_FILE)
-    })
-
-@app.route('/api/dati')
-def api_dati():
-    return jsonify(ottieni_tutti_i_dati())
+@app.route('/api/status')
+def api_status():
+    """Endpoint per verificare lo stato del caricamento"""
+    return jsonify(stato)
 
 @app.route('/api/peggiori/<periodo>')
 def api_peggiori(periodo):
+    # Controlla se i dati sono pronti
+    if not stato['completato']:
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
+    dati = carica_cache()
+    if dati is None:
+        # Cache scaduta, riavvia download
+        avvia_background()
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
     periodo_mappatura = {
         '1s': '1_settimana', '1m': '1_mese', '3m': '3_mesi',
         '6m': '6_mesi', '12m': '12_mesi', '18m': '18_mesi', '24m': '24_mesi'
     }
     
     periodo_nome = periodo_mappatura.get(periodo, '3_mesi')
-    dati = ottieni_tutti_i_dati()
     
     tutti_titoli = []
     for categoria, titoli in dati.items():
@@ -255,13 +289,20 @@ def api_peggiori(periodo):
 
 @app.route('/api/migliori/<periodo>')
 def api_migliori(periodo):
+    if not stato['completato']:
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
+    dati = carica_cache()
+    if dati is None:
+        avvia_background()
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
     periodo_mappatura = {
         '1s': '1_settimana', '1m': '1_mese', '3m': '3_mesi',
         '6m': '6_mesi', '12m': '12_mesi', '18m': '18_mesi', '24m': '24_mesi'
     }
     
     periodo_nome = periodo_mappatura.get(periodo, '3_mesi')
-    dati = ottieni_tutti_i_dati()
     
     tutti_titoli = []
     for categoria, titoli in dati.items():
@@ -286,7 +327,13 @@ def api_migliori(periodo):
 
 @app.route('/api/top-capitalizzati')
 def api_top_capitalizzati():
-    dati = ottieni_tutti_i_dati()
+    if not stato['completato']:
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
+    dati = carica_cache()
+    if dati is None:
+        avvia_background()
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
     
     titoli_con_cap = []
     for categoria, titoli in dati.items():
@@ -307,7 +354,13 @@ def api_top_capitalizzati():
 
 @app.route('/api/categoria/<categoria_nome>')
 def api_per_categoria(categoria_nome):
-    dati = ottieni_tutti_i_dati()
+    if not stato['completato']:
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
+    
+    dati = carica_cache()
+    if dati is None:
+        avvia_background()
+        return jsonify({'in_attesa': True, 'stato': stato}), 202
     
     if categoria_nome not in dati:
         return jsonify({'errore': 'Categoria non trovata'}), 404
