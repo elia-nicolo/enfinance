@@ -35,6 +35,8 @@
         <div class="controls" id="controls-categorie" style="display: none;">
             <select id="categoria-select">
                 <option value="indici_globali">🌍 Indici Globali</option>
+                <option value="etf_europei">🇪🇺 ETF Europei (UCITS)</option>
+                <option value="etf_usa_principali">🇺🇸 ETF USA Principali</option>
                 <option value="mercati_emergenti">🌏 Mercati Emergenti</option>
                 <option value="top_100_usa">🏢 Top 100 USA</option>
                 <option value="aziende_emergenti">🚀 Aziende Emergenti</option>
@@ -52,5 +54,25 @@
     </div>
 
     <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+    <footer class="site-footer">
+        <div class="footer-content">
+            <div class="footer-info">
+                <span class="footer-label">Ultimo aggiornamento:</span>
+                <span id="footer-ultimo" class="footer-value">-</span>
+            </div>
+            <div class="footer-info">
+                <span class="footer-label">Prossimo aggiornamento:</span>
+                <span id="footer-prossimo" class="footer-value">-</span>
+            </div>
+            <div class="footer-info">
+                <span class="footer-label">Fascia:</span>
+                <span id="footer-fascia" class="footer-value">-</span>
+            </div>
+            <button id="btn-refresh" class="btn-refresh" onclick="forzaRefresh()">
+                🔄 Aggiorna ora
+            </button>
+        </div>
+    </footer>
 </body>
 </html>
